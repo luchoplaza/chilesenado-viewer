@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proyectos Senado - Explorador interactivo (Modular)</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 1.6rem;
+    }
+    .container {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    label {
+      font-weight: 600;
+    }
+    select,
+    button {
+      padding: 4px 8px;
+      font-size: 0.9rem;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .tab-button {
+      border: 1px solid #ccc;
+      background: #eee;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .tab-button.active {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 0.9rem;
+    }
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    th {
+      background: #fafafa;
+    }
+    tbody tr:nth-child(even) {
+      background: #fafafa;
+    }
+    .summary {
+      margin-top: 8px;
+      font-size: 0.9rem;
+    }
+    .pagination {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    button[disabled] {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .loader {
+      margin-top: 10px;
+      font-size: 0.9rem;
+      color: #555;
+    }
+    canvas {
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Proyectos del Senado - Explorador interactivo</h1>
+    <p>
+      Filtra por <strong>estado</strong> y <strong>rango de años de ingreso</strong>.
+      Usa las pestañas para ver la <strong>tabla</strong> o el <strong>gráfico apilado</strong>.
+    </p>
+
+    <div class="controls" data-role="filters">
+      <div>
+        <label for="estadoFilter">Estado (tabla):</label>
+        <select id="estadoFilter">
+          <option value="__all__">(Todos los estados)</option>
+        </select>
+      </div>
+      <div>
+        <label for="yearFromFilter">Desde año:</label>
+        <select id="yearFromFilter">
+          <option value="__all__">(Mínimo)</option>
+        </select>
+      </div>
+      <div>
+        <label for="yearToFilter">Hasta año:</label>
+        <select id="yearToFilter">
+          <option value="__all__">(Máximo)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="tabs" data-role="tabs">
+      <button class="tab-button active" data-tab="tabla">Tabla</button>
+      <button class="tab-button" data-tab="grafico">Gráfico</button>
+    </div>
+
+    <div class="loader" id="loader">Cargando datos...</div>
+
+    <!-- TAB: TABLA -->
+    <section id="tab-tabla" aria-label="Tabla de proyectos">
+      <div class="summary" id="summary" style="display:none;"></div>
+      <table id="resultTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>Fecha ingreso</th>
+            <th>N° Boletín</th>
+            <th>Título</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="pagination" id="pagination" style="display:none;">
+        <button id="prevPage">&laquo; Anterior</button>
+        <span id="pageInfo"></span>
+        <button id="nextPage">Siguiente &raquo;</button>
+      </div>
+    </section>
+
+    <!-- TAB: GRÁFICO -->
+    <section id="tab-grafico" aria-label="Gráfico de proyectos" style="display:none;">
+      <p>
+        El gráfico muestra, para el <strong>rango de años seleccionado</strong>,
+        cómo se reparten los proyectos por <strong>estado</strong> (barras apiladas).
+        El filtro de Estado se aplica solo a la tabla; el gráfico muestra todos los estados.
+      </p>
+      <div style="height: 400px;">
+        <canvas id="estadoChart"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <!-- Chart.js desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- App modular -->
+  <script type="module">
+    // ============================
+    // Configuración general
+    // ============================
+    const CONFIG = {
+      DATA_URL: './senado_proyectos_preprocesado.json',
+      PAGE_SIZE: 100
+    };
+
+    // ============================
+    // Estado global (controlado por App)
+    // ============================
+    const State = {
+      rawData: [], // datos crudos cargados desde el JSON
+      data: [],    // datos normalizados con year y estado_for_chart
+      filteredData: [],
+      allYears: [],
+      currentPage: 1,
+      chartInstance: null
+    };
+
+    // ============================
+    // Referencias al DOM
+    // ============================
+    const DOM = {
+      loader: document.getElementById('loader'),
+      estadoFilter: document.getElementById('estadoFilter'),
+      yearFromFilter: document.getElementById('yearFromFilter'),
+      yearToFilter: document.getElementById('yearToFilter'),
+      tabTabla: document.getElementById('tab-tabla'),
+      tabGrafico: document.getElementById('tab-grafico'),
+      tabButtons: document.querySelectorAll('.tab-button'),
+      table: document.getElementById('resultTable'),
+      tableBody: document.querySelector('#resultTable tbody'),
+      summary: document.getElementById('summary'),
+      pagination: document.getElementById('pagination'),
+      pageInfo: document.getElementById('pageInfo'),
+      prevPageBtn: document.getElementById('prevPage'),
+      nextPageBtn: document.getElementById('nextPage'),
+      chartCanvas: document.getElementById('estadoChart')
+    };
+
+    // ============================
+    // Módulo DataService
+    // ============================
+    const DataService = (() => {
+      function normalizeRecord(d) {
+        const record = { ...d };
+
+        // Asegurar fecha_sort
+        if (!record.fecha_sort) {
+          record.fecha_sort = '';
+        }
+
+        // Determinar año
+        let year = null;
+        if (record.fecha_sort && record.fecha_sort.includes('/')) {
+          // formato esperado: YYYY/MM/DD
+          year = record.fecha_sort.split('/')[0];
+        } else if (record.fecha && record.fecha.includes('/')) {
+          // formato esperado: DD/MM/YYYY
+          const partes = record.fecha.split('/');
+          year = partes[2];
+        }
+        record.year = year;
+
+        // Estado normalizado para gráfico
+        const estNorm = record.estado_normalizado || record.estado;
+        record.estado_for_chart = estNorm || 'Sin estado';
+
+        return record;
+      }
+
+      function buildDistinctYears(data) {
+        return Array.from(
+          new Set(data.map((d) => d.year).filter((y) => !!y))
+        ).sort();
+      }
+
+      function buildDistinctEstados(data) {
+        return Array.from(
+          new Set(data.map((d) => d.estado_normalizado).filter((e) => !!e))
+        ).sort((a, b) => a.localeCompare(b, 'es'));
+      }
+
+      async function loadData(url) {
+        DOM.loader.textContent = `Cargando datos desde ${url} ...`;
+        const res = await fetch(url);
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} al leer ${url}`);
+        }
+
+        const rawData = await res.json();
+        const normalized = rawData.map(normalizeRecord);
+
+        return {
+          rawData,
+          data: normalized,
+          years: buildDistinctYears(normalized),
+          estados: buildDistinctEstados(normalized)
+        };
+      }
+
+      return {
+        loadData
+      };
+    })();
+
+    // ============================
+    // Módulo Filters
+    // ============================
+    const Filters = (() => {
+      function setEstados(estados) {
+        estados.forEach((est) => {
+          const opt = document.createElement('option');
+          opt.value = est;
+          opt.textContent = est;
+          DOM.estadoFilter.appendChild(opt);
+        });
+      }
+
+      function setYears(years) {
+        years.forEach((y) => {
+          const optFrom = document.createElement('option');
+          optFrom.value = y;
+          optFrom.textContent = y;
+          DOM.yearFromFilter.appendChild(optFrom);
+
+          const optTo = document.createElement('option');
+          optTo.value = y;
+          optTo.textContent = y;
+          DOM.yearToFilter.appendChild(optTo);
+        });
+      }
+
+      function getValues() {
+        return {
+          estado: DOM.estadoFilter.value,
+          fromYear: DOM.yearFromFilter.value,
+          toYear: DOM.yearToFilter.value
+        };
+      }
+
+      function init(onChange) {
+        const handler = () => {
+          State.currentPage = 1;
+          onChange();
+        };
+
+        DOM.estadoFilter.addEventListener('change', handler);
+        DOM.yearFromFilter.addEventListener('change', handler);
+        DOM.yearToFilter.addEventListener('change', handler);
+      }
+
+      return {
+        setEstados,
+        setYears,
+        getValues,
+        init
+      };
+    })();
+
+    // ============================
+    // Módulo TableView
+    // ============================
+    const TableView = (() => {
+      function applyFilters() {
+        const { estado, fromYear, toYear } = Filters.getValues();
+
+        State.filteredData = State.data.filter((d) => {
+          // Filtro por estado
+          const okEstado =
+            estado === '__all__' || d.estado_normalizado === estado;
+
+          // Filtro por rango de años
+          let okYear = true;
+          if (d.year) {
+            const y = parseInt(d.year, 10);
+            if (fromYear !== '__all__') {
+              const yFrom = parseInt(fromYear, 10);
+              if (y < yFrom) okYear = false;
+            }
+            if (toYear !== '__all__') {
+              const yTo = parseInt(toYear, 10);
+              if (y > yTo) okYear = false;
+            }
+          } else if (fromYear !== '__all__' || toYear !== '__all__') {
+            // Si no tiene año y se está filtrando por rango, se descarta
+            okYear = false;
+          }
+
+          return okEstado && okYear;
+        });
+
+        // Ordenar por fecha_sort ascendente
+        State.filteredData.sort((a, b) => {
+          if (!a.fecha_sort && !b.fecha_sort) return 0;
+          if (!a.fecha_sort) return -1;
+          if (!b.fecha_sort) return 1;
+          return a.fecha_sort.localeCompare(b.fecha_sort);
+        });
+      }
+
+      function renderSummary({ startIdx, endIdx, total }) {
+        const { estado, fromYear, toYear } = Filters.getValues();
+
+        let desc = `Mostrando ${startIdx + 1}–${endIdx} de ${total} proyectos`;
+
+        if (estado !== '__all__') {
+          desc += ` con estado "${estado}"`;
+        }
+
+        if (fromYear !== '__all__' || toYear !== '__all__') {
+          desc += ' en el rango de años ';
+          if (fromYear !== '__all__') desc += fromYear;
+          desc += '–';
+          if (toYear !== '__all__') desc += toYear;
+        }
+
+        desc += `. Total en dataset: ${State.data.length}.`;
+        DOM.summary.textContent = desc;
+      }
+
+      function renderPagination(total) {
+        const pageSize = CONFIG.PAGE_SIZE;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (State.currentPage > totalPages) State.currentPage = totalPages;
+
+        const { currentPage } = State;
+
+        DOM.pageInfo.textContent = `Página ${currentPage} de ${totalPages}`;
+        DOM.prevPageBtn.disabled = currentPage <= 1;
+        DOM.nextPageBtn.disabled = currentPage >= totalPages;
+
+        DOM.prevPageBtn.onclick = () => {
+          if (State.currentPage > 1) {
+            State.currentPage -= 1;
+            TableView.render();
+          }
+        };
+        DOM.nextPageBtn.onclick = () => {
+          if (State.currentPage < totalPages) {
+            State.currentPage += 1;
+            TableView.render();
+          }
+        };
+
+        DOM.pagination.style.display = total > 0 ? 'flex' : 'none';
+      }
+
+      function renderTableRows(pageData) {
+        DOM.tableBody.innerHTML = '';
+
+        pageData.forEach((row) => {
+          const tr = document.createElement('tr');
+
+          const tdFecha = document.createElement('td');
+          const tdBoletin = document.createElement('td');
+          const tdTitulo = document.createElement('td');
+          const tdEstado = document.createElement('td');
+
+          tdFecha.textContent = row.fecha || '';
+          tdBoletin.textContent = row.boletin || '';
+          tdTitulo.textContent = row.titulo || '';
+          tdEstado.textContent = row.estado || '';
+
+          tr.appendChild(tdFecha);
+          tr.appendChild(tdBoletin);
+          tr.appendChild(tdTitulo);
+          tr.appendChild(tdEstado);
+
+          DOM.tableBody.appendChild(tr);
+        });
+      }
+
+      function render() {
+        applyFilters();
+
+        const total = State.filteredData.length;
+
+        if (total === 0) {
+          DOM.table.style.display = 'none';
+          DOM.pagination.style.display = 'none';
+          DOM.summary.style.display = 'block';
+          DOM.summary.textContent = `No hay proyectos para los filtros seleccionados. Total en dataset: ${State.data.length}.`;
+          return;
+        }
+
+        const pageSize = CONFIG.PAGE_SIZE;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (State.currentPage > totalPages) State.currentPage = totalPages;
+
+        const startIdx = (State.currentPage - 1) * pageSize;
+        const endIdx = Math.min(startIdx + pageSize, total);
+        const pageData = State.filteredData.slice(startIdx, endIdx);
+
+        renderTableRows(pageData);
+        renderSummary({ startIdx, endIdx, total });
+        renderPagination(total);
+
+        DOM.table.style.display = 'table';
+        DOM.summary.style.display = 'block';
+      }
+
+      return {
+        render
+      };
+    })();
+
+    // ============================
+    // Módulo ChartView
+    // ============================
+    const ChartView = (() => {
+      function getYearsInRange() {
+        const { fromYear, toYear } = Filters.getValues();
+        let yearsInRange = State.allYears.slice();
+
+        if (fromYear !== '__all__') {
+          const yFrom = parseInt(fromYear, 10);
+          yearsInRange = yearsInRange.filter((y) => parseInt(y, 10) >= yFrom);
+        }
+        if (toYear !== '__all__') {
+          const yTo = parseInt(toYear, 10);
+          yearsInRange = yearsInRange.filter((y) => parseInt(y, 10) <= yTo);
+        }
+
+        if (yearsInRange.length === 0) {
+          yearsInRange = State.allYears.slice();
+        }
+
+        return yearsInRange;
+      }
+
+      function buildCounts(yearsInRange) {
+        const counts = {};
+
+        State.data.forEach((d) => {
+          const y = d.year;
+          if (!y) return;
+          if (!yearsInRange.includes(y)) return;
+
+          const est = d.estado_for_chart || 'Sin estado';
+          if (!counts[est]) counts[est] = {};
+          counts[est][y] = (counts[est][y] || 0) + 1;
+        });
+
+        return counts;
+      }
+
+      function buildDatasets(counts, labels) {
+        const estados = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'es'));
+
+        return estados.map((est) => {
+          const data = labels.map((y) => counts[est][y] || 0);
+          return {
+            label: est,
+            data
+            // colores por defecto de Chart.js
+          };
+        });
+      }
+
+      function update() {
+        if (!DOM.chartCanvas) return;
+
+        const ctx = DOM.chartCanvas.getContext('2d');
+        const labels = getYearsInRange();
+        const counts = buildCounts(labels);
+        const datasets = buildDatasets(counts, labels);
+
+        const titleText = 'Distribución de estados por año';
+
+        if (State.chartInstance) {
+          State.chartInstance.data.labels = labels;
+          State.chartInstance.data.datasets = datasets;
+          State.chartInstance.options.plugins.title.text = titleText;
+          State.chartInstance.update();
+          return;
+        }
+
+        State.chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: titleText
+              },
+              legend: {
+                position: 'bottom'
+              }
+            },
+            scales: {
+              x: {
+                stacked: true
+              },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Número de proyectos'
+                }
+              }
+            }
+          }
+        });
+      }
+
+      return {
+        update
+      };
+    })();
+
+    // ============================
+    // Módulo Tabs
+    // ============================
+    const Tabs = (() => {
+      function showTab(tabName) {
+        if (tabName === 'tabla') {
+          DOM.tabTabla.style.display = 'block';
+          DOM.tabGrafico.style.display = 'none';
+        } else {
+          DOM.tabTabla.style.display = 'none';
+          DOM.tabGrafico.style.display = 'block';
+          ChartView.update();
+        }
+      }
+
+      function init() {
+        DOM.tabButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            DOM.tabButtons.forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const tab = btn.getAttribute('data-tab');
+            showTab(tab);
+          });
+        });
+      }
+
+      return {
+        init
+      };
+    })();
+
+    // ============================
+    // App (controlador principal)
+    // ============================
+    const App = (() => {
+      async function init() {
+        try {
+          const { rawData, data, years, estados } = await DataService.loadData(CONFIG.DATA_URL);
+
+          State.rawData = rawData;
+          State.data = data;
+          State.allYears = years;
+
+          Filters.setEstados(estados);
+          Filters.setYears(years);
+
+          Filters.init(() => {
+            TableView.render();
+            // el gráfico se actualiza solo cuando se abre su pestaña
+            if (DOM.tabGrafico.style.display !== 'none') {
+              ChartView.update();
+            }
+          });
+
+          Tabs.init();
+
+          // Primera renderización
+          TableView.render();
+          DOM.loader.style.display = 'none';
+        } catch (err) {
+          console.error(err);
+          DOM.loader.textContent = `Error cargando datos: ${err}`;
+        }
+      }
+
+      return { init };
+    })();
+
+    // Arranque de la aplicación
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+    });
+  </script>
+</body>
+</html>
