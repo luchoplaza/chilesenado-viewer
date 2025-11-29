@@ -1,9 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
   <meta charset="UTF-8" />
   <title>Proyectos Senado - Explorador interactivo (Modular)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -176,6 +177,38 @@
       margin-top: 10px;
       font-size: 0.9rem;
       color: #666;
+    }
+
+    /* Mobile Optimization */
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+        margin: 10px;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      .game-container {
+        padding: 10px;
+        width: 100%;
+        max-width: none;
+      }
+
+      .game-question {
+        font-size: 1.3rem;
+        min-height: auto;
+      }
+
+      .game-options {
+        gap: 10px;
+      }
+
+      .game-option-btn {
+        padding: 20px 10px;
+        font-size: 1.2rem;
+      }
     }
   </style>
 </head>
@@ -802,33 +835,33 @@
         DOM.scoreTotal.textContent = score.total;
       }
 
-      function startRound() {
+      function nextRound() {
         const candidates = getProjectsEnTramitacion();
         if (candidates.length === 0) {
-          DOM.gameQuestion.textContent = 'No hay suficientes datos de proyectos en tramitación para jugar.';
+          DOM.gameQuestion.textContent = 'No hay proyectos "En tramitación" disponibles para jugar.';
           return;
         }
 
-        const randomIndex = getRandomInt(0, candidates.length - 1);
-        currentProject = candidates[randomIndex];
+        const idx = getRandomInt(0, candidates.length - 1);
+        currentProject = candidates[idx];
+        const correctYear = currentProject.year;
 
         DOM.gameQuestion.textContent = currentProject.titulo;
         DOM.gameFeedback.textContent = '';
         DOM.nextRoundBtn.style.display = 'none';
-
-        const options = generateOptions(currentProject.year);
-        renderOptions(options, currentProject.year);
-
         isRoundActive = true;
+
+        const options = generateOptions(correctYear);
+        renderOptions(options, correctYear);
       }
 
       function init() {
-        DOM.nextRoundBtn.addEventListener('click', startRound);
+        DOM.nextRoundBtn.onclick = nextRound;
+        nextRound();
       }
 
       return {
-        init,
-        startRound
+        init
       };
     })();
 
@@ -836,37 +869,29 @@
     // Módulo Tabs
     // ============================
     const Tabs = (() => {
-      function showTab(tabName) {
-        if (tabName === 'tabla') {
-          DOM.tabTabla.style.display = 'block';
-          DOM.tabGrafico.style.display = 'none';
-          DOM.tabJuego.style.display = 'none';
-          DOM.filterControls.style.display = 'flex';
-        } else if (tabName === 'grafico') {
-          DOM.tabTabla.style.display = 'none';
-          DOM.tabGrafico.style.display = 'block';
-          DOM.tabJuego.style.display = 'none';
-          DOM.filterControls.style.display = 'flex';
-          ChartView.update();
-        } else if (tabName === 'juego') {
-          DOM.tabTabla.style.display = 'none';
-          DOM.tabGrafico.style.display = 'none';
-          DOM.tabJuego.style.display = 'block';
-          DOM.filterControls.style.display = 'none';
-          if (!DOM.gameQuestion.textContent.trim()) {
-            GameView.startRound();
-          }
-        }
+      function showTab(tabId) {
+        // Ocultar todas las secciones
+        [DOM.tabTabla, DOM.tabGrafico, DOM.tabJuego].forEach(el => {
+          if (el) el.style.display = 'none';
+        });
+
+        // Quitar clase active de botones
+        DOM.tabButtons.forEach(btn => btn.classList.remove('active'));
+
+        // Mostrar sección seleccionada
+        const target = document.getElementById(`tab-${tabId}`);
+        if (target) target.style.display = 'block';
+
+        // Activar botón
+        const btn = document.querySelector(`.tab-button[data-tab="${tabId}"]`);
+        if (btn) btn.classList.add('active');
       }
 
       function init() {
-        DOM.tabButtons.forEach((btn) => {
+        DOM.tabButtons.forEach(btn => {
           btn.addEventListener('click', () => {
-            DOM.tabButtons.forEach((b) => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            const tab = btn.getAttribute('data-tab');
-            showTab(tab);
+            const tabId = btn.getAttribute('data-tab');
+            showTab(tabId);
           });
         });
       }
@@ -878,50 +903,52 @@
     })();
 
     // ============================
-    // App (controlador principal)
+    // Módulo App
     // ============================
     const App = (() => {
       async function init() {
         try {
-          const { rawData, data, years, estados } = await DataService.loadData(CONFIG.DATA_URL);
+          const data = await DataService.loadData(CONFIG.DATA_URL);
+          State.rawData = data.rawData;
+          State.data = data.data;
+          State.allYears = data.years;
 
-          State.rawData = rawData;
-          State.data = data;
-          State.allYears = years;
-
-          Filters.setEstados(estados);
-          Filters.setYears(years);
-
+          // Inicializar filtros
+          Filters.setEstados(data.estados);
+          Filters.setYears(data.years);
           Filters.init(() => {
             TableView.render();
-            // el gráfico se actualiza solo cuando se abre su pestaña
-            if (DOM.tabGrafico.style.display !== 'none') {
-              ChartView.update();
-            }
+            ChartView.update();
           });
 
+          // Inicializar Tabs
           Tabs.init();
+
+          // Inicializar Juego
           GameView.init();
 
-          // Iniciar en la pestaña de juego por defecto
-          Tabs.showTab('juego'); // Esto ocultará los filtros y mostrará el juego
-          // No necesitamos llamar a TableView.render() aquí si no se ve la tabla, 
-          // pero no hace daño dejarlo listo.
+          // Render inicial
           TableView.render();
+          ChartView.update();
+
           DOM.loader.style.display = 'none';
+
         } catch (err) {
           console.error(err);
-          DOM.loader.textContent = `Error cargando datos: ${err}`;
+          DOM.loader.textContent = `Error cargando datos: ${err.message}`;
         }
       }
 
-      return { init };
+      return {
+        init
+      };
     })();
 
     // Arranque de la aplicación
     document.addEventListener('DOMContentLoaded', () => {
       App.init();
     });
+
   </script>
 </body>
 
