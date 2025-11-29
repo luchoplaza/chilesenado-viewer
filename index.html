@@ -1,5 +1,6 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <title>Proyectos Senado - Explorador interactivo (Modular)</title>
@@ -9,9 +10,11 @@
       margin: 20px;
       background: #f5f5f5;
     }
+
     h1 {
       font-size: 1.6rem;
     }
+
     .container {
       background: white;
       padding: 16px;
@@ -20,6 +23,7 @@
       max-width: 1200px;
       margin: 0 auto;
     }
+
     .controls {
       display: flex;
       flex-wrap: wrap;
@@ -27,19 +31,23 @@
       margin-bottom: 12px;
       align-items: center;
     }
+
     label {
       font-weight: 600;
     }
+
     select,
     button {
       padding: 4px 8px;
       font-size: 0.9rem;
     }
+
     .tabs {
       display: flex;
       gap: 8px;
       margin-bottom: 12px;
     }
+
     .tab-button {
       border: 1px solid #ccc;
       background: #eee;
@@ -48,33 +56,40 @@
       cursor: pointer;
       font-size: 0.9rem;
     }
+
     .tab-button.active {
       background: #007bff;
       color: white;
       border-color: #007bff;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 8px;
       font-size: 0.9rem;
     }
+
     th,
     td {
       border: 1px solid #ddd;
       padding: 6px 8px;
       vertical-align: top;
     }
+
     th {
       background: #fafafa;
     }
+
     tbody tr:nth-child(even) {
       background: #fafafa;
     }
+
     .summary {
       margin-top: 8px;
       font-size: 0.9rem;
     }
+
     .pagination {
       margin-top: 8px;
       display: flex;
@@ -82,29 +97,104 @@
       align-items: center;
       font-size: 0.9rem;
     }
+
     button[disabled] {
       opacity: 0.4;
       cursor: default;
     }
+
     .loader {
       margin-top: 10px;
       font-size: 0.9rem;
       color: #555;
     }
+
     canvas {
       max-width: 100%;
     }
+
+    /* Estilos del Juego */
+    .game-container {
+      text-align: center;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .game-question {
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+      font-weight: bold;
+      min-height: 60px;
+    }
+
+    .game-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .game-option-btn {
+      padding: 15px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      background: #fff;
+      border: 2px solid #007bff;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .game-option-btn:hover:not([disabled]) {
+      background: #e6f2ff;
+    }
+
+    .game-option-btn.correct {
+      background-color: #d4edda;
+      border-color: #28a745;
+      color: #155724;
+    }
+
+    .game-option-btn.incorrect {
+      background-color: #f8d7da;
+      border-color: #dc3545;
+      color: #721c24;
+    }
+
+    .game-feedback {
+      margin-top: 15px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      min-height: 1.5em;
+    }
+
+    .game-controls {
+      margin-top: 20px;
+    }
+
+    .game-score {
+      margin-top: 10px;
+      font-size: 0.9rem;
+      color: #666;
+    }
   </style>
 </head>
+
 <body>
   <div class="container">
-    <h1>Proyectos del Senado - Explorador interactivo</h1>
+    <h1>Proyectos de ley - Senado de Chile</h1>
     <p>
-      Filtra por <strong>estado</strong> y <strong>rango de años de ingreso</strong>.
-      Usa las pestañas para ver la <strong>tabla</strong> o el <strong>gráfico apilado</strong>.
+      "Adivina el año" es un juego donde intentas adivinar el año de ingreso de un proyecto.
+    </p>
+    <p>
+      Las pestañas <strong>tabla</strong> y <strong>gráfico</strong> muestran los proyectos filtrados por
+      <strong>estado</strong> y <strong>rango de años</strong>.
+    </p>
+    <p>
+      Dashboard desarrollado por medio de Antigravity de Google. Creado por: Luis Plaza A.
     </p>
 
-    <div class="controls" data-role="filters">
+    <div class="controls" data-role="filters" id="filterControls">
       <div>
         <label for="estadoFilter">Estado (tabla):</label>
         <select id="estadoFilter">
@@ -126,14 +216,15 @@
     </div>
 
     <div class="tabs" data-role="tabs">
-      <button class="tab-button active" data-tab="tabla">Tabla</button>
+      <button class="tab-button active" data-tab="juego">Adivina el Año</button>
+      <button class="tab-button" data-tab="tabla">Tabla</button>
       <button class="tab-button" data-tab="grafico">Gráfico</button>
     </div>
 
     <div class="loader" id="loader">Cargando datos...</div>
 
     <!-- TAB: TABLA -->
-    <section id="tab-tabla" aria-label="Tabla de proyectos">
+    <section id="tab-tabla" aria-label="Tabla de proyectos" style="display:none;">
       <div class="summary" id="summary" style="display:none;"></div>
       <table id="resultTable" style="display:none;">
         <thead>
@@ -162,6 +253,34 @@
       </p>
       <div style="height: 400px;">
         <canvas id="estadoChart"></canvas>
+      </div>
+    </section>
+
+    <!-- TAB: JUEGO -->
+    <section id="tab-juego" aria-label="Juego de Adivinanza">
+      <div class="game-container">
+        <h2>¿En qué año se presentó este proyecto?</h2>
+        <p>Se ha seleccionado aleatoriamente un proyecto que se encuentra <strong>En tramitación</strong>.</p>
+
+        <div class="game-question" id="gameQuestion">
+          <!-- Título del proyecto aquí -->
+        </div>
+
+        <div class="game-options" id="gameOptions">
+          <!-- Botones de opciones aquí -->
+        </div>
+
+        <div class="game-feedback" id="gameFeedback"></div>
+
+        <div class="game-controls">
+          <button id="nextRoundBtn"
+            style="display:none; padding: 10px 20px; font-size: 1rem; cursor: pointer;">Siguiente Proyecto
+            &raquo;</button>
+        </div>
+
+        <div class="game-score">
+          Aciertos: <span id="scoreCorrect">0</span> | Intentos: <span id="scoreTotal">0</span>
+        </div>
       </div>
     </section>
   </div>
@@ -196,6 +315,7 @@
     // ============================
     const DOM = {
       loader: document.getElementById('loader'),
+      filterControls: document.getElementById('filterControls'),
       estadoFilter: document.getElementById('estadoFilter'),
       yearFromFilter: document.getElementById('yearFromFilter'),
       yearToFilter: document.getElementById('yearToFilter'),
@@ -209,7 +329,15 @@
       pageInfo: document.getElementById('pageInfo'),
       prevPageBtn: document.getElementById('prevPage'),
       nextPageBtn: document.getElementById('nextPage'),
-      chartCanvas: document.getElementById('estadoChart')
+      chartCanvas: document.getElementById('estadoChart'),
+      // Game DOM
+      tabJuego: document.getElementById('tab-juego'),
+      gameQuestion: document.getElementById('gameQuestion'),
+      gameOptions: document.getElementById('gameOptions'),
+      gameFeedback: document.getElementById('gameFeedback'),
+      nextRoundBtn: document.getElementById('nextRoundBtn'),
+      scoreCorrect: document.getElementById('scoreCorrect'),
+      scoreTotal: document.getElementById('scoreTotal')
     };
 
     // ============================
@@ -592,6 +720,119 @@
     })();
 
     // ============================
+    // Módulo GameView
+    // ============================
+    const GameView = (() => {
+      let currentProject = null;
+      let score = { correct: 0, total: 0 };
+      let isRoundActive = false;
+
+      function getRandomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function getProjectsEnTramitacion() {
+        // Filtrar proyectos que están "En tramitación" y tienen año válido
+        return State.data.filter(d =>
+          d.estado_normalizado === 'En tramitación' && d.year && !isNaN(parseInt(d.year))
+        );
+      }
+
+      function generateOptions(correctYear) {
+        const year = parseInt(correctYear);
+        const options = new Set([year]);
+
+        // Generar 3 años distractores
+        while (options.size < 4) {
+          // Rango aleatorio cercano: +/- 5 años, pero dentro de límites lógicos (ej. 1990 - presente)
+          const offset = getRandomInt(-5, 5);
+          const candidate = year + offset;
+          // Evitar años futuros o muy antiguos si se desea, aquí simple:
+          if (candidate >= 1990 && candidate <= new Date().getFullYear()) {
+            options.add(candidate);
+          }
+        }
+
+        return Array.from(options).sort((a, b) => a - b);
+      }
+
+      function renderOptions(options, correctYear) {
+        DOM.gameOptions.innerHTML = '';
+        options.forEach(year => {
+          const btn = document.createElement('button');
+          btn.className = 'game-option-btn';
+          btn.textContent = year;
+          btn.onclick = () => handleGuess(year, correctYear, btn);
+          DOM.gameOptions.appendChild(btn);
+        });
+      }
+
+      function handleGuess(selectedYear, correctYear, btnElement) {
+        if (!isRoundActive) return;
+        isRoundActive = false;
+
+        const isCorrect = parseInt(selectedYear) === parseInt(correctYear);
+        score.total++;
+        if (isCorrect) score.correct++;
+
+        // Actualizar UI
+        updateScore();
+
+        // Mostrar feedback visual en botones
+        const buttons = DOM.gameOptions.querySelectorAll('button');
+        buttons.forEach(b => {
+          b.disabled = true;
+          if (parseInt(b.textContent) === parseInt(correctYear)) {
+            b.classList.add('correct');
+          } else if (b === btnElement && !isCorrect) {
+            b.classList.add('incorrect');
+          }
+        });
+
+        DOM.gameFeedback.textContent = isCorrect
+          ? '¡Correcto!'
+          : `Incorrecto. El año era ${correctYear}.`;
+
+        DOM.gameFeedback.style.color = isCorrect ? '#28a745' : '#dc3545';
+        DOM.nextRoundBtn.style.display = 'inline-block';
+      }
+
+      function updateScore() {
+        DOM.scoreCorrect.textContent = score.correct;
+        DOM.scoreTotal.textContent = score.total;
+      }
+
+      function startRound() {
+        const candidates = getProjectsEnTramitacion();
+        if (candidates.length === 0) {
+          DOM.gameQuestion.textContent = 'No hay suficientes datos de proyectos en tramitación para jugar.';
+          return;
+        }
+
+        const randomIndex = getRandomInt(0, candidates.length - 1);
+        currentProject = candidates[randomIndex];
+
+        DOM.gameQuestion.textContent = currentProject.titulo;
+        DOM.gameFeedback.textContent = '';
+        DOM.nextRoundBtn.style.display = 'none';
+
+        const options = generateOptions(currentProject.year);
+        renderOptions(options, currentProject.year);
+
+        isRoundActive = true;
+      }
+
+      function init() {
+        DOM.nextRoundBtn.addEventListener('click', startRound);
+      }
+
+      return {
+        init,
+        startRound
+      };
+    })();
+
+    // ============================
     // Módulo Tabs
     // ============================
     const Tabs = (() => {
@@ -599,10 +840,22 @@
         if (tabName === 'tabla') {
           DOM.tabTabla.style.display = 'block';
           DOM.tabGrafico.style.display = 'none';
-        } else {
+          DOM.tabJuego.style.display = 'none';
+          DOM.filterControls.style.display = 'flex';
+        } else if (tabName === 'grafico') {
           DOM.tabTabla.style.display = 'none';
           DOM.tabGrafico.style.display = 'block';
+          DOM.tabJuego.style.display = 'none';
+          DOM.filterControls.style.display = 'flex';
           ChartView.update();
+        } else if (tabName === 'juego') {
+          DOM.tabTabla.style.display = 'none';
+          DOM.tabGrafico.style.display = 'none';
+          DOM.tabJuego.style.display = 'block';
+          DOM.filterControls.style.display = 'none';
+          if (!DOM.gameQuestion.textContent.trim()) {
+            GameView.startRound();
+          }
         }
       }
 
@@ -619,7 +872,8 @@
       }
 
       return {
-        init
+        init,
+        showTab
       };
     })();
 
@@ -647,8 +901,12 @@
           });
 
           Tabs.init();
+          GameView.init();
 
-          // Primera renderización
+          // Iniciar en la pestaña de juego por defecto
+          Tabs.showTab('juego'); // Esto ocultará los filtros y mostrará el juego
+          // No necesitamos llamar a TableView.render() aquí si no se ve la tabla, 
+          // pero no hace daño dejarlo listo.
           TableView.render();
           DOM.loader.style.display = 'none';
         } catch (err) {
@@ -666,4 +924,5 @@
     });
   </script>
 </body>
+
 </html>
